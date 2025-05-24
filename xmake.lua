@@ -1,41 +1,42 @@
 add_rules("mode.debug", "mode.release")
 
+set_project("ForgeExten")
+set_version("1.0.0-alpha")
+set_languages("cxx20")
 target("ForgeExten")
 set_kind("binary")
-add_includedirs("Include")
 
-add_files("Src/*.cpp")
+set_warnings("allextra")
+add_cxxflags("-Werror")
+add_cxxflags("-Wno-gnu-line-marker")
+add_cxxflags("-Wpedantic")
 
-toolchain("ForgeExten")
-set_kind("standalone")
-set_toolset("cc", "clang", "tcc", "gcc")
-set_toolset("cxx", "clang", "clang++", "g++")
-set_toolset("ld", "ld.lld", "clang", "ld")
-set_toolset("ar", "ar")
-set_toolset("ex", "ar")
-set_toolset("strip", "strip")
+if is_mode("debug") then
+	set_optimize("none")
+	set_symbols("debug")
+	add_ldflags("-fno-omit-frame-pointer")
+	add_ldflags("-fsanitize=undefined")
+	add_defines("FORGE_DEBUG")
+end
 
-on_load(function(toolchain)
-	local march = is_arch("x86_64", "x64") and "-m64" or "-m32"
+if is_mode("release") then
+	set_optimize("fastest")
+	set_symbols("hidden")
+	add_defines("NDEBUG")
+end
 
-	toolchain:add("cxflags", march)
-	toolchain:add("ldflags", march)
-	toolchain:add("shflags", march)
-	if not is_plat("windows") and os.isdir("/usr") then
-		for _, includedir in ipairs({ "/usr/local/include", "/usr/include" }) do
-			if os.isdir(includedir) then
-				toolchain:add("includedirs", includedir)
-			end
-		end
-		for _, linkdir in ipairs({ "/usr/local/lib", "/usr/lib" }) do
-			if os.isdir(linkdir) then
-				toolchain:add("linkdirs", linkdir)
-			end
-		end
+if is_plat("linux") then
+	if has_config("use_pkg") then
+		add_packages("vulkan")
+	else
+		add_links("vulkan")
 	end
-end)
+end
 
-toolchain_end()
+add_includedirs("Include")
+add_files("Src/**.cpp")
+
+target_end()
 
 task("clangd")
 set_menu({
@@ -43,8 +44,15 @@ set_menu({
 	description = "generate a new version of compile_commands.json from clangd",
 })
 on_run(function()
-	os.exec("rm -rf compile_commands.json")
+	if os.isfile("compile_commands.json") then
+		os.rm("compile_commands.json")
+	end
 	os.exec("xmake project -k compile_commands")
 end)
-
 task_end()
+
+option("use_pkg")
+set_default(true)
+set_showmenu(true)
+set_description("Use pkg-config to find Vulkan")
+option_end()
